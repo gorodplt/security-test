@@ -1,0 +1,111 @@
+# GitHub Actions Workflow Template for Cisco AI Defense Skill Scanner
+# Save this as: .github/workflows/scan-skills.yml
+
+name: Cisco AI Defense Security Scan
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '.cursor/skills/**'
+      - '.github/workflows/scan-skills.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - '.cursor/skills/**'
+
+jobs:
+  scan-mcp-plugins:
+    name: Scan MCP Plugins
+    runs-on: ubuntu-latest
+    
+    permissions:
+      # Required for uploading SARIF results to GitHub Security tab
+      security-events: write
+      contents: read
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: 📦 Install Cisco AI Defense Skill Scanner
+        run: |
+          pip install --upgrade pip
+          pip install cisco-ai-skill-scanner
+      
+      - name: 📋 List available analyzers
+        run: skill-scanner list-analyzers
+      
+      - name: 🔍 Quick security scan
+        run: |
+          echo "Running basic security scan..."
+          skill-scanner scan-all .cursor/skills \
+            --recursive \
+            --format table
+        continue-on-error: true
+      
+      - name: 🔬 Deep behavioral analysis
+        run: |
+          echo "Running deep behavioral analysis..."
+          skill-scanner scan-all .cursor/skills \
+            --recursive \
+            --use-behavioral \
+            --format markdown \
+            --detailed \
+            --output scan-report.md
+        continue-on-error: true
+      
+      - name: 📊 Generate SARIF for GitHub Security
+        run: |
+          echo "Generating SARIF report for GitHub Security tab..."
+          skill-scanner scan-all .cursor/skills \
+            --recursive \
+            --use-behavioral \
+            --format sarif \
+            --output results.sarif
+        continue-on-error: true
+      
+      - name: ⬆️ Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: cisco-skill-scanner
+      
+      - name: 💾 Upload scan reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cisco-scanner-reports
+          path: |
+            scan-report.md
+            results.sarif
+          retention-days: 90
+      
+      - name: 🚦 CI Gate - Fail on HIGH/CRITICAL issues
+        run: |
+          echo "====================================================="
+          echo "CI GATE: Checking for HIGH or CRITICAL security issues"
+          echo "This step will FAIL the build if issues are found"
+          echo "====================================================="
+          
+          skill-scanner scan-all .cursor/skills \
+            --recursive \
+            --use-behavioral \
+            --policy strict \
+            --fail-on-severity high \
+            --format json \
+            --compact \
+            --output strict-results.json
+      
+      - name: ✅ All security checks passed
+        if: success()
+        run: |
+          echo "✅ All security checks passed!"
+          echo "No HIGH or CRITICAL security issues found."
+          echo "This code is safe to merge."
