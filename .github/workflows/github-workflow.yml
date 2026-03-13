@@ -7,7 +7,7 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - '.cursor/skills/**'
+      - 'plugins/**'
       - '.github/workflows/scan-skills.yml'
   pull_request:
     branches: [ main, master ]
