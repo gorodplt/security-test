@@ -2,7 +2,7 @@ jobs:
   scan:
     uses: cisco-ai-defense/skill-scanner/.github/workflows/scan-skills.yml@main
     with:
-      skill_path: .cursor/skills
+      skill_path: plugins
       use_llm: true
       use_behavioral: true
       policy: permissive
