@@ -1,78 +1,11 @@
-name: Cisco Security Scan
-
-on:
-  push:
-    branches: [main, master]
-    paths: ['plugins/**']
-  pull_request:
-    paths: ['plugins/**']
-
 jobs:
   scan:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install scanner
-        run: pip install cisco-ai-skill-scanner
-
-      # Tier 3: LLM + behavioral + VirusTotal, strict policy.
-      # continue-on-error keeps the job green regardless of severity findings.
-      - name: Scan plugins — markdown report
-        env:
-          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: gpt-4o
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: |
-          skill-scanner scan-all plugins \
-            --recursive \
-            --use-llm \
-            --use-behavioral \
-            --use-virustotal \
-            --policy strict \
-            --check-overlap \
-            --format markdown \
-            --detailed \
-            --output scan-report.md
-        continue-on-error: true
-
-      - name: Scan plugins — SARIF for Code Scanning
-        env:
-          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: gpt-4o
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: |
-          skill-scanner scan-all plugins \
-            --recursive \
-            --use-llm \
-            --use-behavioral \
-            --use-virustotal \
-            --policy strict \
-            --check-overlap \
-            --format sarif \
-            --output results.sarif
-        continue-on-error: true
-
-      - name: Upload to Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: results.sarif
-
-      - name: Upload report artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: scan-reports
-          path: |
-            scan-report.md
-            results.sarif
-          retention-days: 90
+    uses: cisco-ai-defense/skill-scanner/.github/workflows/scan-skills.yml@main
+    with:
+      skill_path: plugins
+      use_llm: true
+      use_behavioral: true
+      policy: permissive
+    secrets:
+      llm_api_key: ${{ secrets.OA }}
+      virustotal_api_key: ${{ secrets.VT }}
