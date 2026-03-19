@@ -29,12 +29,13 @@ jobs:
       - name: Scan plugins — markdown report
         env:
           SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: gpt-4o
+          SKILL_SCANNER_LLM_MODEL: claude-sonnet-4-6
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           skill-scanner scan-all plugins \
             --recursive \
             --use-llm \
+            --llm-provider anthropic \
             --use-behavioral \
             --use-virustotal \
             --policy strict \
@@ -47,12 +48,13 @@ jobs:
       - name: Scan plugins — SARIF for Code Scanning
         env:
           SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: gpt-4o
+          SKILL_SCANNER_LLM_MODEL: claude-sonnet-4-6
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           skill-scanner scan-all plugins \
             --recursive \
             --use-llm \
+            --llm-provider anthropic \
             --use-behavioral \
             --use-virustotal \
             --policy strict \
