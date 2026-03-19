@@ -1,5 +1,5 @@
 {
-  "description": "Learning mode hook that adds interactive learning instructions",
+  "description": "Learning mode hook that adds interactive learning instructions test",
   "hooks": {
     "SessionStart": [
       {
