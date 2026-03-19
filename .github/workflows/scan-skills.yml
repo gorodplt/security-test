@@ -21,6 +21,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Verify secrets are set
+        run: |
+          [ -n "$SKILL_SCANNER_LLM_API_KEY" ] && echo "LLM key: SET" || echo "LLM key: MISSING"
+          [ -n "$VIRUSTOTAL_API_KEY" ] && echo "VT key: SET" || echo "VT key: MISSING"
+        env:
+          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+
       - name: Install scanner
         run: pip install cisco-ai-skill-scanner
 
