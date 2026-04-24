@@ -1,19 +1,34 @@
-name: Cisco Security Scan
+name: Security Scan (Skills + MCPs)
 
 on:
   push:
     branches: [main, master]
-    paths: ['plugins/**']
+    paths:
+      - 'plugins/**'
+      - '.claude/skills/**'
+      - '**/.mcp.json'
+      - '**/mcp/**'
   pull_request:
-    paths: ['plugins/**']
+    paths:
+      - 'plugins/**'
+      - '.claude/skills/**'
+      - '**/.mcp.json'
+      - '**/mcp/**'
+  workflow_dispatch:
+
+env:
+  # Flip to 'true' once we trust the scanners — blocks PRs on findings.
+  ENFORCE_BLOCKING: 'false'
+  # Shared LLM config for Cisco scanners. litellm requires the provider prefix.
+  LLM_MODEL: anthropic/claude-3-5-sonnet-20241022
 
 jobs:
-  scan:
+  skill-scanner:
+    name: Cisco skill-scanner
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
+      security-events: write    # SARIF upload to Code Scanning
       contents: read
-
     steps:
       - uses: actions/checkout@v4
 
@@ -21,60 +36,149 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install scanner
+      - name: Install skill-scanner
         run: pip install cisco-ai-skill-scanner
 
-      # Tier 3: LLM + behavioral + VirusTotal, strict policy.
-      # continue-on-error keeps the job green regardless of severity findings.
-      - name: Scan plugins — markdown report
+      - name: Scan — SARIF (for Code Scanning)
         env:
           SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: claude-3-5-sonnet-20241022
+          SKILL_SCANNER_LLM_MODEL: ${{ env.LLM_MODEL }}
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           skill-scanner scan-all plugins \
             --recursive \
             --use-llm \
-            --llm-provider anthropic \
+            --use-behavioral \
+            --use-virustotal \
+            --policy strict \
+            --check-overlap \
+            --format sarif \
+            --output skill-scanner.sarif
+        continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
+
+      - name: Scan — Markdown (human-readable)
+        env:
+          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
+          SKILL_SCANNER_LLM_MODEL: ${{ env.LLM_MODEL }}
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          skill-scanner scan-all plugins \
+            --recursive \
+            --use-llm \
             --use-behavioral \
             --use-virustotal \
             --policy strict \
             --check-overlap \
             --format markdown \
             --detailed \
-            --output scan-report.md
-        continue-on-error: true
+            --output skill-scanner.md
+        continue-on-error: true   # supplementary report; never blocks
 
-      - name: Scan plugins — SARIF for Code Scanning
-        env:
-          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: claude-3-5-sonnet-20241022
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: |
-          skill-scanner scan-all plugins \
-            --recursive \
-            --use-llm \
-            --llm-provider anthropic \
-            --use-behavioral \
-            --use-virustotal \
-            --policy strict \
-            --check-overlap \
-            --format sarif \
-            --output results.sarif
-        continue-on-error: true
-
-      - name: Upload to Security tab
+      - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: results.sarif
+          sarif_file: skill-scanner.sarif
+          category: skill-scanner
 
-      - name: Upload report artifact
+      - name: Upload skill-scanner artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: scan-reports
+          name: skill-scanner-report
           path: |
-            scan-report.md
-            results.sarif
+            skill-scanner.sarif
+            skill-scanner.md
           retention-days: 90
+          if-no-files-found: ignore
+
+  agent-scan:
+    name: Snyk agent-scan
+    runs-on: ubuntu-latest
+    # Allowed to fail at the job level until SNYK_TOKEN is configured.
+    # Once the secret is in place, delete this line and rely on ENFORCE_BLOCKING.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Scan skills with agent-scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          # --skills points at a directory of Skill definitions; recurse into plugins/
+          uvx snyk-agent-scan@latest --skills plugins --json > agent-scan.json
+        continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
+
+      - name: Upload agent-scan artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-scan-report
+          path: agent-scan.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  mcp-scanner:
+    name: Cisco mcp-scanner (conditional)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect MCP configs
+        id: mcp
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(**/.mcp.json **/mcp.json **/tools.json **/prompts.json **/resources.json mcp/**/*.json plugins/**/mcp/**/*.json)
+          if [ ${#files[@]} -gt 0 ]; then
+            printf '%s\n' "${files[@]}" > mcp-targets.txt
+            echo "Found MCP configs:"
+            cat mcp-targets.txt
+            echo "has_mcp=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No MCP configs found in repo." | tee mcp-scanner.txt
+            echo "has_mcp=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.mcp.outputs.has_mcp == 'true'
+        with:
+          python-version: '3.12'
+
+      - name: Install mcp-scanner
+        if: steps.mcp.outputs.has_mcp == 'true'
+        run: pip install cisco-ai-mcp-scanner
+
+      - name: Scan discovered MCP configs
+        if: steps.mcp.outputs.has_mcp == 'true'
+        env:
+          MCP_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}  # reuse Anthropic key
+          MCP_SCANNER_LLM_MODEL: ${{ env.LLM_MODEL }}
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          # Static-analysis mode. When live servers land, add --server-url invocations per file.
+          tools_file=$(grep -E 'tools\.json$' mcp-targets.txt | head -1 || true)
+          if [ -z "$tools_file" ]; then
+            echo "MCP configs detected but no tools.json among them — emitting empty report." > mcp-scanner.json
+          else
+            mcp-scanner --analyzers yara,vulnerable-package,llm \
+              --format raw static \
+              --tools "$tools_file" \
+              > mcp-scanner.json || true
+          fi
+        continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
+
+      - name: Upload mcp-scanner artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-scanner-report
+          path: |
+            mcp-scanner.json
+            mcp-scanner.txt
+            mcp-targets.txt
+          retention-days: 90
+          if-no-files-found: ignore
