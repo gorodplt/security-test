@@ -1,5 +1,5 @@
 {
-  "description": "Security reminder hook that warns about potential security issues when editing files",
+  "description": "Security reminder hook that warns about potential security issues when editing files.",
   "hooks": {
     "PreToolUse": [
       {
