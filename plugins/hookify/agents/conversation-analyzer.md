@@ -83,7 +83,7 @@ Convert behaviors into matchable patterns:
 - Security issues (hardcoded secrets, eval)
 - Data loss risks
 
-**Medium severity (warn):**
+**Medium severity (warn) :**
 - Style violations (console.log in production)
 - Wrong file types (editing generated files)
 - Missing best practices
