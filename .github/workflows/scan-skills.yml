@@ -74,15 +74,35 @@ jobs:
             --output skill-scanner.md
         continue-on-error: true   # supplementary report; never blocks
 
+      - name: Publish skill-scanner findings to job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 🔎 Cisco skill-scanner findings"
+            echo ""
+            if [ -s skill-scanner.md ]; then
+              # GitHub's step-summary limit is 1 MB. Truncate just in case.
+              head -c 900000 skill-scanner.md
+              size=$(wc -c < skill-scanner.md)
+              if [ "$size" -gt 900000 ]; then
+                echo ""
+                echo "_…report truncated at 900 KB; download the \`skill-scanner-report\` artifact for the full file._"
+              fi
+            else
+              echo "_No markdown report was produced (scan step likely failed before output)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: skill-scanner.sarif
           category: skill-scanner
 
       - name: Upload skill-scanner artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: skill-scanner-report
@@ -99,10 +119,10 @@ jobs:
     # Once the secret is in place, delete this line and rely on ENFORCE_BLOCKING.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
 
       - name: Scan skills with agent-scan
         env:
@@ -112,8 +132,37 @@ jobs:
           uvx snyk-agent-scan@latest --skills plugins --json > agent-scan.json
         continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
+      - name: Publish agent-scan findings to job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 🔎 Snyk agent-scan findings"
+            echo ""
+            if [ -s agent-scan.json ]; then
+              # Try to format with jq; fall back to raw JSON in a code fence.
+              if command -v jq >/dev/null && jq -e . agent-scan.json >/dev/null 2>&1; then
+                echo '<details><summary>Pretty-printed JSON (click to expand)</summary>'
+                echo ''
+                echo '```json'
+                jq '.' agent-scan.json | head -c 900000
+                echo '```'
+                echo '</details>'
+              else
+                echo '<details><summary>Raw output (click to expand)</summary>'
+                echo ''
+                echo '```'
+                head -c 900000 agent-scan.json
+                echo '```'
+                echo '</details>'
+              fi
+            else
+              echo "_No agent-scan output produced. Likely missing/invalid \`SNYK_TOKEN\`._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload agent-scan artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: agent-scan-report
@@ -125,7 +174,7 @@ jobs:
     name: Cisco mcp-scanner (conditional)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Detect MCP configs
         id: mcp
@@ -143,7 +192,7 @@ jobs:
             echo "has_mcp=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.mcp.outputs.has_mcp == 'true'
         with:
           python-version: '3.12'
@@ -171,8 +220,38 @@ jobs:
           fi
         continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
+      - name: Publish mcp-scanner findings to job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 🔎 Cisco mcp-scanner findings"
+            echo ""
+            if [ -s mcp-scanner.json ]; then
+              if command -v jq >/dev/null && jq -e . mcp-scanner.json >/dev/null 2>&1; then
+                echo '<details><summary>Pretty-printed JSON (click to expand)</summary>'
+                echo ''
+                echo '```json'
+                jq '.' mcp-scanner.json | head -c 900000
+                echo '```'
+                echo '</details>'
+              else
+                echo '<details><summary>Raw output (click to expand)</summary>'
+                echo ''
+                echo '```'
+                head -c 900000 mcp-scanner.json
+                echo '```'
+                echo '</details>'
+              fi
+            elif [ -s mcp-scanner.txt ]; then
+              cat mcp-scanner.txt
+            else
+              echo "_No MCP scan output produced._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload mcp-scanner artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mcp-scanner-report
