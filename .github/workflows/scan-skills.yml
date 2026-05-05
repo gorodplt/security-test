@@ -30,9 +30,9 @@ jobs:
       security-events: write    # SARIF upload to Code Scanning
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -75,14 +75,14 @@ jobs:
         continue-on-error: true   # supplementary report; never blocks
 
       - name: Upload SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: skill-scanner.sarif
           category: skill-scanner
 
       - name: Upload skill-scanner artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: skill-scanner-report
@@ -99,10 +99,10 @@ jobs:
     # Once the secret is in place, delete this line and rely on ENFORCE_BLOCKING.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v8
 
       - name: Scan skills with agent-scan
         env:
@@ -113,7 +113,7 @@ jobs:
         continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
       - name: Upload agent-scan artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: agent-scan-report
@@ -125,7 +125,7 @@ jobs:
     name: Cisco mcp-scanner (conditional)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Detect MCP configs
         id: mcp
@@ -143,7 +143,7 @@ jobs:
             echo "has_mcp=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.mcp.outputs.has_mcp == 'true'
         with:
           python-version: '3.12'
@@ -172,7 +172,7 @@ jobs:
         continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
       - name: Upload mcp-scanner artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mcp-scanner-report
