@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ralph Wiggum Stop Hook
+# Ralph Wiggum Stop Hook test
 # Prevents session exit when a ralph-loop is active
 # Feeds Claude's output back as input to continue the loop
 
