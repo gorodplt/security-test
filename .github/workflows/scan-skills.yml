@@ -27,7 +27,6 @@ jobs:
     name: Cisco skill-scanner
     runs-on: ubuntu-latest
     permissions:
-      security-events: write    # SARIF upload to Code Scanning
       contents: read
     steps:
       - uses: actions/checkout@v6
@@ -38,23 +37,6 @@ jobs:
 
       - name: Install skill-scanner
         run: pip install cisco-ai-skill-scanner
-
-      - name: Scan — SARIF (for Code Scanning)
-        env:
-          SKILL_SCANNER_LLM_API_KEY: ${{ secrets.SKILL_SCANNER_LLM_API_KEY }}
-          SKILL_SCANNER_LLM_MODEL: claude-sonnet-4-5-20250929
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: |
-          skill-scanner scan-all plugins \
-            --recursive \
-            --use-llm \
-            --use-behavioral \
-            --use-virustotal \
-            --policy strict \
-            --check-overlap \
-            --format sarif \
-            --output skill-scanner.sarif
-        continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
       - name: Scan — Markdown (human-readable)
         env:
@@ -72,7 +54,7 @@ jobs:
             --format markdown \
             --detailed \
             --output skill-scanner.md
-        continue-on-error: true   # supplementary report; never blocks
+        continue-on-error: ${{ env.ENFORCE_BLOCKING != 'true' }}
 
       - name: Publish skill-scanner findings to job summary
         if: always()
@@ -94,21 +76,12 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: skill-scanner.sarif
-          category: skill-scanner
-
       - name: Upload skill-scanner artifacts
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: skill-scanner-report
-          path: |
-            skill-scanner.sarif
-            skill-scanner.md
+          path: skill-scanner.md
           retention-days: 90
           if-no-files-found: ignore
 
